@@ -5,19 +5,36 @@
 
 ---
 
-## 📁 Repository Structure
+📁 **Repository Structure**
+
+```bash
 kubernetes-production-setup/
-├── aws/                          # AWS EKS manifests
-│   ├── namespace.yaml            # Kubernetes namespace
-│   ├── secrets.yaml              # DB credentials as K8s secrets
-│   ├── mariadb-deployment.yaml   # MariaDB StatefulSet + PVC
-│   ├── mariadb-service.yaml      # MariaDB ClusterIP service
-│   ├── backend-deployment.yaml   # Spring Boot deployment x2
-│   ├── backend-service.yaml      # Backend ClusterIP service
-│   ├── frontend-deployment.yaml  # React+Nginx deployment x2
-│   └── frontend-service.yaml     # Frontend LoadBalancer service
-├── azure/                        # Azure AKS manifests (Phase 9)
-└── gcp/                          # GCP GKE manifests (Phase 9)
+
+├── common/                         # Shared Kubernetes resources
+│   ├── namespace.yaml              # Application namespace
+│   └── secrets.yaml                # Database credentials (K8s Secrets)
+│
+├── aws/                            # AWS EKS Kubernetes manifests
+│   ├── database/
+│   │   ├── mariadb-statefulset.yaml   # MariaDB StatefulSet + PVC
+│   │   └── mariadb-service.yaml       # MariaDB ClusterIP Service
+│   │
+│   ├── backend/
+│   │   ├── backend-deployment.yaml    # Spring Boot (replicas: 2)
+│   │   └── backend-service.yaml       # Backend ClusterIP Service
+│   │
+│   ├── frontend/
+│   │   ├── frontend-deployment.yaml   # React + Nginx (replicas: 2)
+│   │   └── frontend-service.yaml      # Frontend LoadBalancer Service
+│
+├── azure/                          # Azure AKS manifests (Phase 2)
+│   └── [To be implemented]
+│
+├── gcp/                            # Google GKE manifests (Phase 3)
+│   └── [To be implemented]
+│
+└── README.md                       # Project documentation
+```
 
 ---
 
