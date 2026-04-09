@@ -27,10 +27,10 @@ kubernetes-production-setup/
 │   │   ├── frontend-deployment.yaml   # React + Nginx (replicas: 2)
 │   │   └── frontend-service.yaml      # Frontend LoadBalancer Service
 │
-├── azure/                          # Azure AKS manifests (Phase 2)
+├── azure/                          # Azure AKS manifests (Phase 9)
 │   └── [To be implemented]
 │
-├── gcp/                            # Google GKE manifests (Phase 3)
+├── gcp/                            # Google GKE manifests (Phase 9)
 │   └── [To be implemented]
 │
 └── README.md                       # Project documentation
