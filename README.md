@@ -146,8 +146,6 @@ kubectl get svc frontend-service -n studentsphere \
 ### Student Registered on EKS
 ![Student Registered](screenshots/04-student-registered-eks.png)
 
-### API Testing
-![Testing](screenshots/05-Testing.png)
 
 ---
 
