@@ -5,36 +5,21 @@
 
 ---
 
-📁 **Repository Structure**
-
-```bash
+## 📁 Repository Structure
 kubernetes-production-setup/
-
-├── common/                         # Shared Kubernetes resources
-│   ├── namespace.yaml              # Application namespace
-│   └── secrets.yaml                # Database credentials (K8s Secrets)
-│
-├── aws/                            # AWS EKS Kubernetes manifests
-│   ├── database/
-│   │   ├── mariadb-statefulset.yaml   # MariaDB StatefulSet + PVC
-│   │   └── mariadb-service.yaml       # MariaDB ClusterIP Service
-│   │
-│   ├── backend/
-│   │   ├── backend-deployment.yaml    # Spring Boot (replicas: 2)
-│   │   └── backend-service.yaml       # Backend ClusterIP Service
-│   │
-│   ├── frontend/
-│   │   ├── frontend-deployment.yaml   # React + Nginx (replicas: 2)
-│   │   └── frontend-service.yaml      # Frontend LoadBalancer Service
-│
-├── azure/                          # Azure AKS manifests (Phase 9)
-│   └── [To be implemented]
-│
-├── gcp/                            # Google GKE manifests (Phase 9)
-│   └── [To be implemented]
-│
-└── README.md                       # Project documentation
-```
+├── aws/                             # AWS EKS Kubernetes manifests
+│   ├── namespace.yaml               # Kubernetes namespace
+│   ├── secrets.yaml                 # DB credentials as K8s Secrets
+│   ├── mariadb-deployment.yaml      # MariaDB StatefulSet + PVC
+│   ├── mariadb-service.yaml         # MariaDB Headless Service
+│   ├── backend-deployment.yaml      # Spring Boot Deployment x2
+│   ├── backend-service.yaml         # Backend ClusterIP Service
+│   ├── frontend-deployment.yaml     # React + Nginx Deployment x2
+│   └── frontend-service.yaml        # Frontend LoadBalancer Service
+├── azure/                           # Azure AKS manifests (Phase 9)
+├── gcp/                             # GCP GKE manifests (Phase 9)
+├── screenshots/                     # Proof of deployment
+└── README.md
 
 ---
 
@@ -57,13 +42,13 @@ EBS Persistent Volume (5Gi)
 
 | Resource | Type | Replicas | Description |
 |---|---|---|---|
-| mariadb | StatefulSet | 1 | Persistent database |
-| backend | Deployment | 2 | REST API server |
+| mariadb | StatefulSet | 1 | Persistent database with EBS volume |
+| backend | Deployment | 2 | Spring Boot REST API |
 | frontend | Deployment | 2 | React + Nginx |
-| frontend-service | LoadBalancer | - | Public access |
-| backend-service | ClusterIP | - | Internal only |
-| mariadb-service | Headless | - | StatefulSet DNS |
-| db-secret | Secret | - | DB credentials |
+| frontend-service | LoadBalancer | - | Public internet access |
+| backend-service | ClusterIP | - | Internal cluster only |
+| mariadb-service | Headless | - | StatefulSet DNS resolution |
+| db-secret | Secret | - | Database credentials |
 
 ---
 
@@ -71,10 +56,9 @@ EBS Persistent Volume (5Gi)
 
 ### Prerequisites
 ```bash
-# Tools required
-aws --version       # AWS CLI
-kubectl version     # kubectl
-eksctl version      # eksctl
+aws --version
+kubectl version --client
+eksctl version
 ```
 
 ### Step 1 — Create EKS Cluster
@@ -89,6 +73,9 @@ eksctl create cluster \
   --nodes-max 3 \
   --managed
 ```
+
+Expected output:
+✔ EKS cluster "studentsphere-cluster" in "ap-south-1" region is ready
 
 ### Step 2 — Install EBS CSI Driver
 ```bash
@@ -121,18 +108,6 @@ kubectl apply -f aws/frontend-service.yaml
 kubectl get all -n studentsphere
 ```
 
-Expected output:
-NAME                            READY   STATUS    RESTARTS
-pod/backend-xxxx                1/1     Running   0
-pod/backend-xxxx                1/1     Running   0
-pod/frontend-xxxx               1/1     Running   0
-pod/frontend-xxxx               1/1     Running   0
-pod/mariadb-0                   1/1     Running   0
-NAME                       TYPE           EXTERNAL-IP
-service/frontend-service   LoadBalancer   xxxx.ap-south-1.elb.amazonaws.com
-service/backend-service    ClusterIP      <none>
-service/mariadb-service    ClusterIP      None
-
 ### Step 5 — Get App URL
 ```bash
 kubectl get svc frontend-service -n studentsphere \
@@ -141,39 +116,53 @@ kubectl get svc frontend-service -n studentsphere \
 
 ---
 
-## 🐛 Troubleshooting
+## 📸 Output / Proof
 
-### Problem 1 — MariaDB Pod Pending
-```bash
-# Check error
-kubectl describe pod mariadb-0 -n studentsphere | grep -A 5 Events
+### All Kubernetes Resources Running
+![kubectl get all](screenshots/01-kubectl-get-all.png)
 
-# Fix — Install EBS CSI Driver
-eksctl create addon --name aws-ebs-csi-driver \
-  --cluster studentsphere-cluster --region ap-south-1 --force
-```
+### Nodes Ready
+![kubectl get nodes](screenshots/02-kubectl-get-nodes.png)
 
-### Problem 2 — Frontend CrashLoopBackOff
-```bash
-# Check logs
-kubectl logs -n studentsphere -l app=frontend
+### App Live on AWS EKS
+![App on EKS](screenshots/03-app-on-eks.png)
 
-# Error: host not found in upstream "backend"
-# Fix — nginx.conf mein use backend-service instead of backend
-proxy_pass http://backend-service:8080/api/;
-```
+### Student Registered on EKS
+![Student Registered](screenshots/04-student-registered-eks.png)
 
-### Problem 3 — t3.medium Launch Failed
-Error: instance type not eligible
-Fix: use t3.small
---node-type t3.small
+### API Testing
+![Testing](screenshots/05-Testing.png)
 
 ---
 
-## 🔗 Main Project
+## 🐛 Troubleshooting
 
-This repository is part of the main project:
-👉 [multi-cloud-devops-studentsphere](https://github.com/manesaurabh1704-devops/multi-cloud-devops-studentsphere)
+### Problem 1 — t3.medium Launch Failed
+Error: InvalidParameterCombination - instance type not eligible
+Fix:   Use t3.small instead of t3.medium
+
+### Problem 2 — MariaDB Pod Pending
+```bash
+# Error
+0/2 nodes available: pod has unbound PersistentVolumeClaims
+
+# Fix — Install EBS CSI Driver + add storageClassName
+storageClassName: gp2
+```
+
+### Problem 3 — Frontend CrashLoopBackOff
+```bash
+# Error
+host not found in upstream "backend"
+
+# Fix — nginx.conf
+proxy_pass http://backend-service:8080/api/;
+# Use backend-service (K8s service name) not backend (Docker Compose name)
+```
+
+---
+
+## 🔗 Related Repositories
 
 | Repository | Purpose |
 |---|---|
