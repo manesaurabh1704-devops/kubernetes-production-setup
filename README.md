@@ -1,6 +1,7 @@
 # ☸️ Kubernetes Production Setup
 
 > Production-grade Kubernetes manifests for StudentSphere application.
+> Covers AWS EKS deployment, HPA, Canary, Blue-Green, RBAC, and Network Policies.
 > Part of the [multi-cloud-devops-studentsphere](https://github.com/manesaurabh1704-devops/multi-cloud-devops-studentsphere) project.
 
 ---
@@ -18,10 +19,13 @@ kubernetes-production-setup/
 │   ├── backend-service.yaml         # Backend ClusterIP Service
 │   ├── frontend-deployment.yaml     # React + Nginx Deployment x2
 │   ├── frontend-service.yaml        # Frontend LoadBalancer Service
-│   ├── backend-hpa.yaml             # HPA for backend (Phase 5)
-│   ├── frontend-hpa.yaml            # HPA for frontend (Phase 5)
-│   ├── backend-canary.yaml          # Canary deployment (Phase 5)
-│   └── backend-blue-green.yaml      # Blue-Green deployment (Phase 5)
+│   ├── backend-hpa.yaml             # HPA — CPU 70% Memory 95% min2 max5
+│   ├── frontend-hpa.yaml            # HPA — CPU 70% Memory 80% min2 max5
+│   ├── backend-canary.yaml          # Canary deployment — 33% traffic
+│   ├── backend-blue-green.yaml      # Blue-Green — zero downtime switch
+│   ├── rbac.yaml                    # ServiceAccounts + Roles + RoleBindings
+│   ├── network-policy.yaml          # Default deny + selective allow rules
+│   └── argocd-app.yaml              # ArgoCD GitOps application
 ├── azure/                           # Azure AKS manifests (Phase 9)
 ├── gcp/                             # GCP GKE manifests (Phase 9)
 ├── screenshots/                     # Proof of deployment
@@ -61,9 +65,11 @@ EBS Persistent Volume (5Gi)
 | db-secret | Secret | - | Database credentials |
 | backend-hpa | HPA | 2-5 | Auto-scale backend on CPU/Memory |
 | frontend-hpa | HPA | 2-5 | Auto-scale frontend on CPU/Memory |
-| backend-canary | Deployment | 1 | Canary deployment for testing |
+| backend-canary | Deployment | 1 | Canary — 33% traffic to new version |
 | backend-blue | Deployment | 1 | Blue environment (stable) |
 | backend-green | Deployment | 1 | Green environment (new version) |
+| backend-sa | ServiceAccount | - | RBAC identity for backend |
+| frontend-sa | ServiceAccount | - | RBAC identity for frontend |
 
 ---
 
@@ -146,6 +152,20 @@ kubectl get svc frontend-service -n studentsphere \
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
 ```
 
+### Output / Proof
+
+#### All Kubernetes Resources Running
+![kubectl get all](screenshots/01-kubectl-get-all.png)
+
+#### Nodes Ready
+![kubectl get nodes](screenshots/02-kubectl-get-nodes.png)
+
+#### App Live on AWS EKS
+![App on EKS](screenshots/03-app-on-eks.png)
+
+#### Student Registered on EKS
+![Student Registered](screenshots/04-student-registered-eks.png)
+
 ---
 
 ## 🚀 Phase 5 — Advanced Kubernetes Features
@@ -153,21 +173,19 @@ kubectl get svc frontend-service -n studentsphere \
 ### Feature 1 — HPA (Horizontal Pod Autoscaler)
 
 #### What
-Automatically scales pods based on CPU and memory usage.
+Automatically scales pods up/down based on CPU and memory usage.
 
 #### Why
 ```
 Without HPA: Fixed 2 pods — cannot handle traffic spikes
-With HPA:    2 → 5 pods automatically on high load
+With HPA:    Load increases → 2→5 pods auto-scale
+             Load decreases → 5→2 pods auto-scale down
 ```
 
 #### How
 ```bash
-# Apply HPA
 kubectl apply -f aws/backend-hpa.yaml
 kubectl apply -f aws/frontend-hpa.yaml
-
-# Verify
 kubectl get hpa -n studentsphere
 ```
 
@@ -183,26 +201,18 @@ frontend-hpa   Deployment/frontend   cpu: 1%/70%, memory: 4%/80%    2         5 
 ### Feature 2 — Canary Deployment
 
 #### What
-Deploy new version to small % of traffic before full rollout.
+Deploy new version to 33% of traffic — test before full rollout.
 
 #### Why
 ```
-Without Canary: v1 → v2 (100% users affected if bug)
-With Canary:    v1 (2 pods) + v2 canary (1 pod) → test → full rollout
+Without Canary: v1 → v2 (100% users affected if bug exists)
+With Canary:    v1 (2 pods, 67%) + v2 canary (1 pod, 33%) → test → full rollout
 ```
 
 #### How
 ```bash
-# Apply canary
 kubectl apply -f aws/backend-canary.yaml
-
-# Verify
 kubectl get pods -n studentsphere --show-labels | grep canary
-```
-
-Expected output:
-```
-backend-canary-xxxx   1/1   Running   0   2m   app=backend,track=canary
 ```
 
 ---
@@ -214,19 +224,16 @@ Two identical environments — instant traffic switch with zero downtime.
 
 #### Why
 ```
-Blue  = Current stable (receiving traffic)
+Blue  = Current stable version (receiving traffic)
 Green = New version (tested in parallel)
-Switch = Service selector change = zero downtime!
+Switch = kubectl patch → zero downtime!
+Rollback = kubectl patch back → instant!
 ```
 
 #### How
 ```bash
 # Apply blue-green
 kubectl apply -f aws/backend-blue-green.yaml
-
-# Check current traffic
-kubectl get svc backend-bg-service -n studentsphere \
-  -o jsonpath='{.spec.selector}' && echo ""
 
 # Switch Blue → Green
 kubectl patch svc backend-bg-service -n studentsphere \
@@ -237,6 +244,20 @@ kubectl patch svc backend-bg-service -n studentsphere \
   -p '{"spec":{"selector":{"app":"backend","version":"blue"}}}'
 ```
 
+### Output / Proof
+
+#### HPA Working
+![HPA Working](screenshots/phase5/01-hpa-working.png)
+
+#### Canary Deployment
+![Canary Deployment](screenshots/phase5/02-canary-deployment.png)
+
+#### Blue-Green Switch
+![Blue-Green Switch](screenshots/phase5/02-blue-green-switch.png)
+
+#### All Deployments Running
+![All Deployments](screenshots/phase5/03-all-deployments.png)
+
 ---
 
 ## 🆚 Deployment Strategy Comparison
@@ -244,37 +265,9 @@ kubectl patch svc backend-bg-service -n studentsphere \
 | Strategy | Downtime | Risk | Use Case |
 |---|---|---|---|
 | Rolling Update | Zero | Medium | Normal updates |
-| Canary | Zero | Low | Test new version on small traffic |
-| Blue-Green | Zero | Very Low | Instant switch with easy rollback |
-| Recreate | Yes | High | Dev/test environments |
-
----
-
-## 📸 Output / Proof
-
-### All Kubernetes Resources Running
-![kubectl get all](screenshots/01-kubectl-get-all.png)
-
-### Nodes Ready
-![kubectl get nodes](screenshots/02-kubectl-get-nodes.png)
-
-### App Live on AWS EKS
-![App on EKS](screenshots/03-app-on-eks.png)
-
-### Student Registered on EKS
-![Student Registered](screenshots/04-student-registered-eks.png)
-
-### HPA Working
-![HPA Working](screenshots/phase5/01-hpa-working.png)
-
-### Blue-Green Switch
-![Blue-Green Switch](screenshots/phase5/02-blue-green-switch.png)
-
-### Canary Deployment
-![Canary Deployment](screenshots/phase5/02-canary-deployment.png)
-
-### All Deployments
-![All Deployments](screenshots/phase5/03-all-deployments.png)
+| Canary | Zero | Low | Test new version on 33% traffic |
+| Blue-Green | Zero | Very Low | Instant switch with rollback |
+| Recreate | Yes | High | Dev/test environments only |
 
 ---
 
@@ -295,7 +288,7 @@ Fix:   --node-type t3.small
 eksctl create addon --name aws-ebs-csi-driver \
   --cluster studentsphere-cluster --region ap-south-1 --force
 
-# Fix 2 — Add storageClassName
+# Fix 2 — Add storageClassName in mariadb yaml
 storageClassName: gp2
 ```
 
@@ -306,30 +299,28 @@ host not found in upstream "backend"
 
 # Fix in nginx.conf
 proxy_pass http://backend-service:8080/api/;
+# Use K8s service name not Docker Compose name
 ```
 
 ### Problem 4 — HPA Shows unknown Metrics
 ```
 Error: cpu: <unknown>/70%
-
-Fix: Wait 2-3 minutes for metrics server to populate
-kubectl get pods -n kube-system | grep metrics
+Fix:   Wait 2-3 minutes for metrics server to populate
+       kubectl get pods -n kube-system | grep metrics
 ```
 
 ### Problem 5 — Blue-Green Pods Pending
 ```
 Error: 0/2 nodes available
-
-Fix: Scale down other deployments first
-kubectl scale deployment backend --replicas=2 -n studentsphere
+Fix:   Scale down other deployments first
+       kubectl scale deployment backend --replicas=2 -n studentsphere
 ```
 
 ### Problem 6 — HPA Keeps Scaling Up
 ```
-Error: Too many pods on t3.small
-
-Fix: Increase memory threshold
-averageUtilization: 95
+Error: Too many pods on t3.small nodes
+Fix:   Increase memory threshold in backend-hpa.yaml
+       averageUtilization: 95
 ```
 
 ---
