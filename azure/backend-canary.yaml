@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-canary
+  namespace: studentsphere
+  labels:
+    app: backend
+    track: canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+      track: canary
+  template:
+    metadata:
+      labels:
+        app: backend
+        track: canary
+    spec:
+      containers:
+        - name: backend
+          image: manesaurabh1704devops/studentsphere-backend:v1
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_URL
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_USER
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_PASS
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

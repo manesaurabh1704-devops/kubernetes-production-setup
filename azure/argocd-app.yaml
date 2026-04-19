@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: studentsphere
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/manesaurabh1704-devops/multi-cloud-devops-studentsphere.git
+    targetRevision: main
+    path: k8s/aws
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: studentsphere
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
