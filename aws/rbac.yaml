@@ -1,0 +1,80 @@
+# ─────────────────────────────────────────
+# ServiceAccount for Backend
+# ─────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend-sa
+  namespace: studentsphere
+---
+# ─────────────────────────────────────────
+# Role — What backend can do
+# ─────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backend-role
+  namespace: studentsphere
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+# ─────────────────────────────────────────
+# RoleBinding — Bind role to ServiceAccount
+# ─────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backend-rolebinding
+  namespace: studentsphere
+subjects:
+  - kind: ServiceAccount
+    name: backend-sa
+    namespace: studentsphere
+roleRef:
+  kind: Role
+  name: backend-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# ─────────────────────────────────────────
+# ServiceAccount for Frontend
+# ─────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: frontend-sa
+  namespace: studentsphere
+---
+# ─────────────────────────────────────────
+# Role — What frontend can do
+# ─────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: frontend-role
+  namespace: studentsphere
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch"]
+---
+# ─────────────────────────────────────────
+# RoleBinding — Bind role to ServiceAccount
+# ─────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: frontend-rolebinding
+  namespace: studentsphere
+subjects:
+  - kind: ServiceAccount
+    name: frontend-sa
+    namespace: studentsphere
+roleRef:
+  kind: Role
+  name: frontend-role
+  apiGroup: rbac.authorization.k8s.io

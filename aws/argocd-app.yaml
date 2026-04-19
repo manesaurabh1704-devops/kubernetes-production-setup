@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/manesaurabh1704-devops/multi-cloud-devops-studentsphere.git
     targetRevision: main
-    path: k8s/azure
+    path: k8s/aws
   destination:
     server: https://kubernetes.default.svc
     namespace: studentsphere

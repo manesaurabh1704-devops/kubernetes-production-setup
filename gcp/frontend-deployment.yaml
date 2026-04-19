@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: manesaurabh1704devops/studentsphere-frontend:v2
+          image: manesaurabh1704devops/studentsphere-frontend:v3
           ports:
             - containerPort: 80
           livenessProbe:
