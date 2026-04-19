@@ -1,7 +1,7 @@
 # ☸️ Kubernetes Production Setup
 
 > Production-grade Kubernetes manifests for StudentSphere application.
-> Covers AWS EKS deployment, HPA, Canary, Blue-Green, RBAC, and Network Policies.
+> AWS EKS + Azure AKS + GCP GKE — all three clouds with same K8s manifests.
 > Part of the [multi-cloud-devops-studentsphere](https://github.com/manesaurabh1704-devops/multi-cloud-devops-studentsphere) project.
 
 ---
@@ -10,10 +10,10 @@
 
 ```
 kubernetes-production-setup/
-├── aws/                             # AWS EKS Kubernetes manifests
+├── aws/                             # AWS EKS Kubernetes manifests (Phase 2 & 5)
 │   ├── namespace.yaml               # Kubernetes namespace
 │   ├── secrets.yaml                 # DB credentials as K8s Secrets
-│   ├── mariadb-deployment.yaml      # MariaDB StatefulSet + PVC
+│   ├── mariadb-deployment.yaml      # MariaDB StatefulSet + PVC (gp2)
 │   ├── mariadb-service.yaml         # MariaDB Headless Service
 │   ├── backend-deployment.yaml      # Spring Boot Deployment x2
 │   ├── backend-service.yaml         # Backend ClusterIP Service
@@ -26,11 +26,62 @@ kubernetes-production-setup/
 │   ├── rbac.yaml                    # ServiceAccounts + Roles + RoleBindings
 │   ├── network-policy.yaml          # Default deny + selective allow rules
 │   └── argocd-app.yaml              # ArgoCD GitOps application
-├── azure/                           # Azure AKS manifests (Phase 9)
-├── gcp/                             # GCP GKE manifests (Phase 9)
-├── screenshots/                     # Proof of deployment
+├── azure/                           # Azure AKS manifests (Phase 9) ✅
+│   ├── namespace.yaml               # Kubernetes namespace
+│   ├── secrets.yaml                 # DB credentials as K8s Secrets
+│   ├── mariadb-deployment.yaml      # MariaDB StatefulSet + PVC (managed-csi)
+│   ├── mariadb-service.yaml         # MariaDB Headless Service
+│   ├── backend-deployment.yaml      # Spring Boot Deployment x2
+│   ├── backend-service.yaml         # Backend ClusterIP Service
+│   ├── frontend-deployment.yaml     # React + Nginx Deployment x2 (v3 image)
+│   ├── frontend-service.yaml        # Frontend LoadBalancer Service
+│   ├── backend-hpa.yaml             # HPA — Auto-scale backend
+│   ├── frontend-hpa.yaml            # HPA — Auto-scale frontend
+│   ├── backend-canary.yaml          # Canary deployment
+│   ├── backend-blue-green.yaml      # Blue-Green deployment
+│   ├── rbac.yaml                    # RBAC — ServiceAccounts + Roles
+│   ├── network-policy.yaml          # Zero Trust Network Policies
+│   └── argocd-app.yaml              # ArgoCD GitOps application
+├── gcp/                             # GCP GKE manifests (Phase 10) ✅
+│   ├── namespace.yaml               # Kubernetes namespace
+│   ├── secrets.yaml                 # DB credentials as K8s Secrets
+│   ├── mariadb-deployment.yaml      # MariaDB StatefulSet + PVC (standard)
+│   ├── mariadb-service.yaml         # MariaDB Headless Service
+│   ├── backend-deployment.yaml      # Spring Boot Deployment x2
+│   ├── backend-service.yaml         # Backend ClusterIP Service
+│   ├── frontend-deployment.yaml     # React + Nginx Deployment x2 (v3 image)
+│   └── frontend-service.yaml        # Frontend LoadBalancer Service
+├── screenshots/                     # Proof of deployment — all 3 clouds
 └── README.md
 ```
+
+---
+
+## 🔄 Why Same Manifests for All Clouds?
+
+```
+Cloud-Agnostic Design:
+  AWS EKS → kubectl apply -f aws/
+  Azure AKS → kubectl apply -f azure/
+  GCP GKE → kubectl apply -f gcp/
+
+Only difference per cloud:
+  storageClassName: gp2          (AWS EBS)
+  storageClassName: managed-csi  (Azure CSI)
+  storageClassName: standard     (GCP standard)
+
+Everything else is IDENTICAL — write once, deploy anywhere!
+```
+
+---
+
+## ☁️ Cloud Coverage
+
+| Cloud | Cluster | K8s Version | Storage Class | Status |
+|---|---|---|---|---|
+| AWS EKS | studentsphere-cluster | v1.34 | gp2 (EBS) | ✅ Phase 2 Complete |
+| Azure AKS | studentsphere-aks | v1.35.1 | managed-csi | ✅ Phase 9 Complete |
+| GCP GKE | studentsphere-gke | v1.35.1-gke | standard | ✅ Phase 10 Complete |
 
 ---
 
@@ -39,15 +90,15 @@ kubernetes-production-setup/
 ```
 Internet
     ↓
-AWS LoadBalancer
+Cloud LoadBalancer (AWS ELB / Azure LB / GCP LB)
     ↓
-Frontend Pods (Nginx x2)
-    ↓
+Frontend Pods (React + Nginx x2)
+    ↓  proxy_pass /api/ → backend-service:8080
 Backend Pods (Spring Boot x2)
-    ↓
+    ↓  JDBC → mariadb-service:3306
 MariaDB StatefulSet (x1)
     ↓
-EBS Persistent Volume (5Gi)
+Persistent Volume (5Gi — cloud specific storage)
 ```
 
 ---
@@ -56,18 +107,18 @@ EBS Persistent Volume (5Gi)
 
 | Resource | Type | Replicas | Description |
 |---|---|---|---|
-| mariadb | StatefulSet | 1 | Persistent database with EBS volume |
+| mariadb | StatefulSet | 1 | Persistent database with cloud volume |
 | backend | Deployment | 2 | Spring Boot REST API |
-| frontend | Deployment | 2 | React + Nginx |
+| frontend | Deployment | 2 | React + Nginx (v3 image) |
 | frontend-service | LoadBalancer | - | Public internet access |
 | backend-service | ClusterIP | - | Internal cluster only |
 | mariadb-service | Headless | - | StatefulSet DNS resolution |
 | db-secret | Secret | - | Database credentials |
-| backend-hpa | HPA | 2-5 | Auto-scale backend on CPU/Memory |
-| frontend-hpa | HPA | 2-5 | Auto-scale frontend on CPU/Memory |
+| backend-hpa | HPA | 2-5 | Auto-scale on CPU 70% / Memory 95% |
+| frontend-hpa | HPA | 2-5 | Auto-scale on CPU 70% / Memory 80% |
 | backend-canary | Deployment | 1 | Canary — 33% traffic to new version |
-| backend-blue | Deployment | 1 | Blue environment (stable) |
-| backend-green | Deployment | 1 | Green environment (new version) |
+| backend-blue | Deployment | 2 | Blue environment (stable) |
+| backend-green | Deployment | 2 | Green environment (new version) |
 | backend-sa | ServiceAccount | - | RBAC identity for backend |
 | frontend-sa | ServiceAccount | - | RBAC identity for frontend |
 
@@ -165,6 +216,157 @@ kubectl get svc frontend-service -n studentsphere \
 
 #### Student Registered on EKS
 ![Student Registered](screenshots/04-student-registered-eks.png)
+
+---
+
+## ⚡ Phase 9 — Deploy on Azure AKS
+
+### Prerequisites
+```bash
+# AKS cluster already created via Terraform
+az aks get-credentials \
+  --resource-group studentsphere-rg \
+  --name studentsphere-aks \
+  --overwrite-existing
+
+kubectl get nodes
+```
+
+Expected output:
+```
+NAME                              STATUS   ROLES    AGE   VERSION
+aks-default-xxxx-vmss000000       Ready    <none>   5m    v1.35.1
+aks-default-xxxx-vmss000001       Ready    <none>   5m    v1.35.1
+```
+
+### Step 1 — Deploy All Resources
+```bash
+kubectl apply -f azure/namespace.yaml
+kubectl apply -f azure/secrets.yaml
+kubectl apply -f azure/mariadb-deployment.yaml
+kubectl apply -f azure/mariadb-service.yaml
+kubectl apply -f azure/backend-deployment.yaml
+kubectl apply -f azure/backend-service.yaml
+kubectl apply -f azure/frontend-deployment.yaml
+kubectl apply -f azure/frontend-service.yaml
+```
+
+### Step 2 — Verify Pods Running
+```bash
+kubectl get pods -n studentsphere
+```
+
+Expected output:
+```
+NAME                        READY   STATUS    RESTARTS
+backend-xxxx                1/1     Running   0
+backend-xxxx                1/1     Running   0
+frontend-xxxx               1/1     Running   0
+frontend-xxxx               1/1     Running   0
+mariadb-0                   1/1     Running   0
+```
+
+### Step 3 — Get External IP
+```bash
+kubectl get svc frontend-service -n studentsphere
+```
+
+Expected output:
+```
+NAME               TYPE           EXTERNAL-IP    PORT(S)
+frontend-service   LoadBalancer   4.246.43.99    80:31969/TCP
+```
+
+### Output / Proof
+
+#### Azure AKS Nodes Ready
+![Azure Nodes](screenshots/05-azure-aks-nodes.png)
+
+#### All Pods Running on Azure
+![Azure Pods](screenshots/06-azure-aks-pods.png)
+
+#### App Live on Azure AKS
+![Azure App](screenshots/07-azure-app-running.png)
+
+#### Student Registered on Azure
+![Azure Student](screenshots/08-azure-student-registered.png)
+
+---
+
+## ⚡ Phase 10 — Deploy on GCP GKE
+
+### Prerequisites
+```bash
+# GKE cluster already created via Terraform
+gcloud container clusters get-credentials studentsphere-gke \
+  --zone us-central1-a \
+  --project YOUR_PROJECT_ID
+
+kubectl get nodes
+```
+
+Expected output:
+```
+NAME                                                  STATUS   ROLES    AGE   VERSION
+gke-studentsphere-gk-studentsphere-no-xxxx-xxxx       Ready    <none>   5m    v1.35.1-gke
+gke-studentsphere-gk-studentsphere-no-xxxx-xxxx       Ready    <none>   5m    v1.35.1-gke
+```
+
+### Step 1 — Deploy All Resources
+```bash
+kubectl apply -f gcp/namespace.yaml
+kubectl apply -f gcp/secrets.yaml
+kubectl apply -f gcp/mariadb-deployment.yaml
+kubectl apply -f gcp/mariadb-service.yaml
+kubectl apply -f gcp/backend-deployment.yaml
+kubectl apply -f gcp/backend-service.yaml
+kubectl apply -f gcp/frontend-deployment.yaml
+kubectl apply -f gcp/frontend-service.yaml
+```
+
+### Step 2 — Verify Pods Running
+```bash
+kubectl get pods -n studentsphere
+```
+
+Expected output:
+```
+NAME                        READY   STATUS    RESTARTS
+backend-xxxx                1/1     Running   0
+frontend-xxxx               1/1     Running   0
+mariadb-0                   1/1     Running   0
+```
+
+> **Note:** On e2-medium nodes, scale to 1 replica if CPU insufficient:
+> ```bash
+> kubectl scale deployment backend --replicas=1 -n studentsphere
+> kubectl scale deployment frontend --replicas=1 -n studentsphere
+> ```
+
+### Step 3 — Get External IP
+```bash
+kubectl get svc frontend-service -n studentsphere
+```
+
+Expected output:
+```
+NAME               TYPE           EXTERNAL-IP     PORT(S)
+frontend-service   LoadBalancer   35.188.33.201   80:30385/TCP
+```
+
+### Output / Proof
+
+#### GCP GKE Nodes Ready
+![GCP Nodes](screenshots/09-gcp-gke-nodes.png)
+
+#### All Pods Running on GCP
+![GCP Pods](screenshots/10-gcp-gke-pods.png)
+
+#### App Live on GCP GKE
+![GCP App](screenshots/11-gcp-app-running.png)
+
+#### Student Registered on GCP
+![GCP Student](screenshots/12-gcp-student-registered.png)
 
 ---
 
@@ -273,54 +475,46 @@ kubectl patch svc backend-bg-service -n studentsphere \
 
 ## 🐛 Troubleshooting
 
-### Problem 1 — t3.medium Launch Failed
+### AWS Problems
 ```
 Error: InvalidParameterCombination - instance type not eligible
 Fix:   --node-type t3.small
-```
 
-### Problem 2 — MariaDB Pod Pending
-```bash
-# Error
-0/2 nodes available: pod has unbound PersistentVolumeClaims
+Error: MariaDB Pod Pending — PVC not bound
+Fix:   Install EBS CSI Driver + storageClassName: gp2
 
-# Fix 1 — Install EBS CSI Driver
-eksctl create addon --name aws-ebs-csi-driver \
-  --cluster studentsphere-cluster --region ap-south-1 --force
+Error: Frontend CrashLoopBackOff — host not found
+Fix:   nginx.conf proxy_pass → use K8s service name
+       http://backend-service:8080 (not Docker Compose name)
 
-# Fix 2 — Add storageClassName in mariadb yaml
-storageClassName: gp2
-```
-
-### Problem 3 — Frontend CrashLoopBackOff
-```bash
-# Error
-host not found in upstream "backend"
-
-# Fix in nginx.conf
-proxy_pass http://backend-service:8080/api/;
-# Use K8s service name not Docker Compose name
-```
-
-### Problem 4 — HPA Shows unknown Metrics
-```
-Error: cpu: <unknown>/70%
-Fix:   Wait 2-3 minutes for metrics server to populate
+Error: HPA shows <unknown> metrics
+Fix:   Wait 2-3 minutes for metrics server
        kubectl get pods -n kube-system | grep metrics
 ```
 
-### Problem 5 — Blue-Green Pods Pending
+### Azure Problems
 ```
-Error: 0/2 nodes available
-Fix:   Scale down other deployments first
-       kubectl scale deployment backend --replicas=2 -n studentsphere
+Error: LoadBalancer External IP pending
+Fix:   Assign Network Contributor role to AKS identity
+
+Error: CORS error — old AWS IP in frontend
+Fix:   Use frontend:v3 image (VITE_API_URL=/api)
+       kubectl set image deployment/frontend frontend=studentsphere-frontend:v3
+
+Error: mariadb-storage PVC pending
+Fix:   storageClassName: managed-csi (not gp2)
 ```
 
-### Problem 6 — HPA Keeps Scaling Up
+### GCP Problems
 ```
-Error: Too many pods on t3.small nodes
-Fix:   Increase memory threshold in backend-hpa.yaml
-       averageUtilization: 95
+Error: gke-gcloud-auth-plugin not found
+Fix:   gcloud components install gke-gcloud-auth-plugin
+
+Error: Insufficient CPU — pod pending
+Fix:   kubectl scale deployment backend --replicas=1 -n studentsphere
+
+Error: mariadb-storage PVC pending
+Fix:   storageClassName: standard (not gp2)
 ```
 
 ---
